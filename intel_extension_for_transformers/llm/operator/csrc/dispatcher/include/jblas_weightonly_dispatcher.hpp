@@ -28,6 +28,7 @@ enum WOQ_TASK {
 };
 
 struct woq_config_param {
+  WOQ_TASK task;
   std::string compute_type;           // determin gemm core template
   std::string weight_type;            // determin compress-weight template
   std::string scale_type;             // determin scale param
@@ -43,6 +44,6 @@ struct woq_runtime_ctx {
   jblas::storage::gemm::IWeightBase* deseries_wei;
 };
 
-void dispatch_woq_task(woq_config_param* p, woq_runtime_ctx* ctx, WOQ_TASK task);
+void dispatch_woq_task(woq_config_param* p, woq_runtime_ctx* ctx);
 void set_woq_workspace(torch::Tensor* workspace);
 }  // namespace woq
