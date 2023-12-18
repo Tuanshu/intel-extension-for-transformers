@@ -34,11 +34,14 @@ inline void set_nk(woq_runtime_ctx* ctx, torch::Tensor* tensor) {
   ctx->k = ctx->transpose ? static_cast<int>(tensor->sizes()[1]) : static_cast<int>(tensor->sizes()[0]);
 }
 
-static std::map<std::string, JBLAS_DTYPE> wei2jblasdt_map{
-    {"int4_clip", JBLAS_DTYPE::S4_CLIP}, {"int4_fullrange", JBLAS_DTYPE::S4_FULLRANGE},
-    {"nf4", JBLAS_DTYPE::F4_NF4},        {"fp4_e2m1_bnb", JBLAS_DTYPE::F4_BNB},
-    {"fp4_e2m1", JBLAS_DTYPE::F4_E2M1},  {"fp8_e4m3", JBLAS_DTYPE::F8_E4M3},
-    {"fp8_e5m2", JBLAS_DTYPE::F8_E5M2}};
+static std::map<std::string, JBLAS_DTYPE> wei2jblasdt_map{{"int8", JBLAS_DTYPE::S8},
+                                                          {"int4_clip", JBLAS_DTYPE::S4_CLIP},
+                                                          {"int4_fullrange", JBLAS_DTYPE::S4_FULLRANGE},
+                                                          {"nf4", JBLAS_DTYPE::F4_NF4},
+                                                          {"fp4_e2m1_bnb", JBLAS_DTYPE::F4_BNB},
+                                                          {"fp4_e2m1", JBLAS_DTYPE::F4_E2M1},
+                                                          {"fp8_e4m3", JBLAS_DTYPE::F8_E4M3},
+                                                          {"fp8_e5m2", JBLAS_DTYPE::F8_E5M2}};
 static std::map<std::string, JBLAS_DTYPE> scale2jblasdt_map{{"fp32", JBLAS_DTYPE::F32},
                                                             {"fp8_e8m0", JBLAS_DTYPE::F8_E8M0}};
 static void* woq_workspace = nullptr;
@@ -56,12 +59,14 @@ void woq_dequantize(woq_config_param* p, woq_runtime_ctx* ctx) {
   using PrologueB = typename Launcher::PrologueB;
   static PrologueB kernel;
   if (ctx->transpose) {
-    kernel.unpackTransposeWeight(ctx->deseries_wei->mN, ctx->deseries_wei->mK, ctx->deseries_wei,
+    kernel.unpackTransposeWeight(ctx->deseries_wei->mN, ctx->deseries_wei->mK,
+                                 dynamic_cast<jblas::storage::gemm::StorageWeightKBlockNInteger*>(ctx->deseries_wei),
                                  ctx->output->data_ptr<float>(), ctx->deseries_wei->mK,
                                  &dispatcher_utils::DefaultThreading);
   } else {
-    kernel.unpackWeight(ctx->deseries_wei->mN, ctx->deseries_wei->mK, ctx->deseries_wei, ctx->output->data_ptr<float>(),
-                        ctx->deseries_wei->mN, &dispatcher_utils::DefaultThreading);
+    kernel.unpackWeight(ctx->deseries_wei->mN, ctx->deseries_wei->mK,
+                        dynamic_cast<jblas::storage::gemm::StorageWeightKBlockNInteger*>(ctx->deseries_wei),
+                        ctx->output->data_ptr<float>(), ctx->deseries_wei->mN, &dispatcher_utils::DefaultThreading);
   }
 }
 
@@ -72,16 +77,10 @@ void woq_quantize(woq_config_param* p, woq_runtime_ctx* ctx) {
   using WType = typename Launcher::PrologueB::StorageWeight;
   WType packedw(0);
   static Launcher launcher;
-  if constexpr (std::is_same_v<WType, jblas::storage::gemm::StorageWeightKBlockS8>) {
-    packedw = launcher.mProB.createStorage(ctx->n, ctx->k, ctx->blocksize, jblas::utils::jblas_dtype<float>,
-                                           jblas::utils::jblas_dtype<float>, false);
-  } else if constexpr (std::is_same_v<WType, jblas::storage::gemm::StorageWeightKBlockS4>) {
+  if constexpr (std::is_same_v<WType, jblas::storage::gemm::StorageWeightKBlockNInteger>) {
     packedw = launcher.mProB.createStorage(ctx->n, ctx->k, ctx->blocksize, wei2jblasdt_map[p->weight_type],
                                            jblas::utils::jblas_dtype<float>, jblas::utils::jblas_dtype<float>, false);
-  } else if constexpr (std::is_same_v<WType, jblas::storage::gemm::StorageWeightKBlockF4>) {
-    packedw = launcher.mProB.createStorage(ctx->n, ctx->k, ctx->blocksize, wei2jblasdt_map[p->weight_type],
-                                           jblas::utils::jblas_dtype<float>);
-  } else if constexpr (std::is_same_v<WType, jblas::storage::gemm::StorageWeightKBlockF8>) {
+  } else if constexpr (std::is_same_v<WType, jblas::storage::gemm::StorageWeightKBlockNFloat>) {
     packedw = launcher.mProB.createStorage(ctx->n, ctx->k, ctx->blocksize, wei2jblasdt_map[p->weight_type],
                                            scale2jblasdt_map[p->scale_type]);
   } else {
@@ -114,8 +113,8 @@ void do_compute(woq_config_param* p, woq_runtime_ctx* ctx, ParamA param_a) {
   if constexpr (GemmCore::ISA == JblasAMX_INT8 || GemmCore::ISA == JblasAVX512_VNNI || GemmCore::ISA == JblasAVX_VNNI) {
     using Parallel = jblas::parallel::gemm::SchedulerKBlockS<GemmCore>;
     jblas::utils::GemmProblem gp(1, ctx->m, ctx->n, ctx->k, ctx->blocksize);
-    typename Launcher::Param args{gp, param_a,
-                                  dynamic_cast<jblas::storage::gemm::IWeightKBlockBase*>(ctx->deseries_wei), param_epi};
+    typename Launcher::Param args{
+        gp, param_a, dynamic_cast<jblas::storage::gemm::StorageWeightKBlockNInteger*>(ctx->deseries_wei), param_epi};
     jblas::parallel::GemmRunWithA<Parallel>(launcher, args, &dispatcher_utils::DefaultThreading);
   } else {
     using Parallel = jblas::parallel::gemm::SchedulerKBlock<GemmCore>;
@@ -124,7 +123,7 @@ void do_compute(woq_config_param* p, woq_runtime_ctx* ctx, ParamA param_a) {
     jblas::utils::GemmProblem gp(1, ctx->m, ctx->n, ctx->k, ctx->blocksize);
     typename Launcher::Param args{gp,
                                   param_a,
-                                  dynamic_cast<jblas::storage::gemm::IWeightKBlockBase*>(ctx->deseries_wei),
+                                  dynamic_cast<jblas::storage::gemm::StorageWeightKBlockNInteger*>(ctx->deseries_wei),
                                   {packedw->template SPtr<int8_t>(), packedw->SDtype(), packedw->CStep()},
                                   param_epi};
     jblas::parallel::GemmRun<Parallel>(launcher, args, &dispatcher_utils::DefaultThreading);
@@ -247,19 +246,13 @@ void parse_activation(woq_config_param* p, woq_runtime_ctx* ctx) {
 template <WOQ_TASK TASK, class GemmCore>
 void parse_weight(woq_config_param* p, woq_runtime_ctx* ctx) {
   using namespace jblas::prologue_b::gemm;
-  if (p->weight_type == "int8") {
-    return parse_activation<TASK, GemmCore, WeightKBlockS8>(p, ctx);
+  if (p->weight_type == "int8" || p->weight_type == "int4_clip" || p->weight_type == "int4_fullrange") {
+    return parse_activation<TASK, GemmCore, WeightKBlockNInteger>(p, ctx);
   }
-  if (p->weight_type == "int4_clip" || p->weight_type == "int4_fullrange") {
-    return parse_activation<TASK, GemmCore, WeightKBlockS4>(p, ctx);
-  }
-  if (p->weight_type == "nf4" || p->weight_type == "fp4_e2m1_bnb" || p->weight_type == "fp4_e2m1") {
+  if (p->weight_type == "nf4" || p->weight_type == "fp4_e2m1_bnb" || p->weight_type == "fp4_e2m1" ||
+      p->weight_type == "fp8_e4m3" || p->weight_type == "fp8_e5m2") {
     if constexpr (GemmCore::ISA != JblasAMX_INT8 && GemmCore::ISA != JblasAVX512_VNNI && GemmCore::ISA != JblasAVX_VNNI)
-      return parse_activation<TASK, GemmCore, WeightKBlockF4>(p, ctx);
-  }
-  if (p->weight_type == "fp8_e4m3" || p->weight_type == "fp8_e5m2") {
-    if constexpr (GemmCore::ISA != JblasAMX_INT8 && GemmCore::ISA != JblasAVX512_VNNI && GemmCore::ISA != JblasAVX_VNNI)
-      return parse_activation<TASK, GemmCore, WeightKBlockF8>(p, ctx);
+      return parse_activation<TASK, GemmCore, WeightKBlockNFloat>(p, ctx);
   }
   TORCH_CHECK(false,
               "Qbits: unsupported jblas_config, compute_type==" + p->compute_type + " weight_type==" + p->weight_type);
@@ -288,7 +281,7 @@ void parse_gemm_core_online(woq_config_param* p, woq_runtime_ctx* ctx) {
       return parse_weight<TASK, jblas::gemm::SCoreRowNAvx512f<48, 8>>(p, ctx);
     }
     if (dispatcher_utils::check_avx2()) {
-      return parse_weight<TASK, jblas::gemm::SCoreRowNAvx2<48, 2>>(p, ctx);
+      return parse_weight<TASK, jblas::gemm::SCoreRowNAvx2<24, 4>>(p, ctx);
     }
     TORCH_CHECK(false, "Qbits: device ISA must support AVX2 when compute_type==fp32");
   }
@@ -327,8 +320,8 @@ void parse_gemm_core_offline(woq_config_param* p, woq_runtime_ctx* ctx) {
     if (NTile == jblas::gemm::SCoreRowNAvx512f<48, 8>::NTILE && dispatcher_utils::check_avx512f()) {
       return parse_weight<TASK, jblas::gemm::SCoreRowNAvx512f<48, 8>>(p, ctx);
     }
-    if (NTile == jblas::gemm::SCoreRowNAvx2<48, 2>::NTILE && dispatcher_utils::check_avx2()) {
-      return parse_weight<TASK, jblas::gemm::SCoreRowNAvx2<48, 2>>(p, ctx);
+    if (NTile == jblas::gemm::SCoreRowNAvx2<24, 4>::NTILE && dispatcher_utils::check_avx2()) {
+      return parse_weight<TASK, jblas::gemm::SCoreRowNAvx2<24, 4>>(p, ctx);
     }
   }
   if (CType == uint32_t(jblas::gemm::CompType::COMP_BF16_FP32)) {

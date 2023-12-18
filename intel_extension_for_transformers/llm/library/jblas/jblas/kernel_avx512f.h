@@ -321,13 +321,27 @@ static inline JBLAS_CODE decompress_kblock_bit4_packrow1(utils::bit4x2* srcptr, 
           vzps[iv] = _mm512_cvtepi8_epi32(tmp);
         }
       }
-    }
-    for (; irow < row; irow++) {
-      pad_bit4(tmpbuf, reinterpret_cast<int8_t*>(srcptr + irow * ld_src / 2), zmm_mask, LoadMask48);
-      if constexpr (_IS_SYM) {
-        dequantize(dstptr + irow * ld_dst, tmpbuf, vscales, nullptr);
-      } else {
-        dequantize(dstptr + irow * ld_dst, tmpbuf, vscales, vzps);
+      int rowpad4 = utils::padto_le(row, UnrollRow);
+      for (; irow < rowpad4; irow += UnrollRow) {
+        for (int iter64 = 0; iter64 < Loop64; iter64++) {
+          pad_bit4(tmpbuf + iter64 * 64, reinterpret_cast<int8_t*>(srcptr + irow * ld_src / 2 + 32 * iter64), zmm_mask,
+                   LoadMask64);
+        }
+        for (int iterr = 0; iterr < UnrollRow; iterr++) {
+          if constexpr (_IS_SYM) {
+            dequantize(dstptr + (irow + iterr) * ld_dst, tmpbuf + iterr * ColTile, vscales, nullptr);
+          } else {
+            dequantize(dstptr + (irow + iterr) * ld_dst, tmpbuf + iterr * ColTile, vscales, vzps);
+          }
+        }
+      }
+      for (; irow < row; irow++) {
+        pad_bit4(tmpbuf, reinterpret_cast<int8_t*>(srcptr + irow * ld_src / 2), zmm_mask, LoadMask48);
+        if constexpr (_IS_SYM) {
+          dequantize(dstptr + irow * ld_dst, tmpbuf, vscales, nullptr);
+        } else {
+          dequantize(dstptr + irow * ld_dst, tmpbuf, vscales, vzps);
+        }
       }
     }
     return JblasSuccess;
@@ -563,9 +577,8 @@ inline JBLAS_CODE decompress_kblock_f8_fp(utils::f8* srcptr, _DST_T* dstptr, int
     auto sptr = scales + kpos * NPad;
     int j = 0;
     auto quant = [&](__mmask16 mask) {
-      __m128i f8_src;
       auto sign_revert =
-          _mm512_cvtepi8_epi32(_mm_mask_loadu_epi8(f8_src, mask, reinterpret_cast<__m128i*>(srcptr + i * ld_src + j)));
+          _mm512_cvtepi8_epi32(_mm_maskz_loadu_epi8(mask, reinterpret_cast<__m128i*>(srcptr + i * ld_src + j)));
       auto e_revert = sign_revert;
       auto mantissa_revert = sign_revert;
       sign_revert = _mm512_slli_epi32(sign_revert, 24);
