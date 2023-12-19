@@ -94,6 +94,8 @@ static void woq_linear(const torch::Tensor& activation, const torch::Tensor& wei
   ctx.n = static_cast<int>(ldo);
   ctx.alpha = 1.f;
   ctx.beta = with_bias ? 1.f : 0.f;
+  if (with_bias && bias.scalar_type() != torch::kFloat32)
+    TORCH_CHECK(false, "Qbits: only support fp32 bias in woq linear.");
   init_woq_config_param(&p, &ctx, compute_type, weight_type, scale_type, woq::WOQ_LINEAR);
   woq::dispatch_woq_task(&p, &ctx);
 }

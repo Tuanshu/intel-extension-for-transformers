@@ -42,8 +42,8 @@ static std::map<std::string, JBLAS_DTYPE> wei2jblasdt_map{{"int8", JBLAS_DTYPE::
                                                           {"fp4_e2m1", JBLAS_DTYPE::F4_E2M1},
                                                           {"fp8_e4m3", JBLAS_DTYPE::F8_E4M3},
                                                           {"fp8_e5m2", JBLAS_DTYPE::F8_E5M2}};
-static std::map<std::string, JBLAS_DTYPE> scale2jblasdt_map{{"fp32", JBLAS_DTYPE::F32},
-                                                            {"fp8_e8m0", JBLAS_DTYPE::F8_E8M0}};
+static std::map<std::string, JBLAS_DTYPE> scale2jblasdt_map{
+    {"fp32", JBLAS_DTYPE::F32}, {"bf16", JBLAS_DTYPE::BF16}, {"fp8_e8m0", JBLAS_DTYPE::F8_E8M0}};
 static void* woq_workspace = nullptr;
 static int64_t workspace_size = 0;
 
@@ -70,7 +70,6 @@ void woq_dequantize(woq_config_param* p, woq_runtime_ctx* ctx) {
   }
 }
 
-// TODO(zhe): weight+scale combination check.
 template <class Launcher>
 void woq_quantize(woq_config_param* p, woq_runtime_ctx* ctx) {
   if (dispatcher_utils::initer.verbose) dispatcher_utils::timer.start();
@@ -78,9 +77,18 @@ void woq_quantize(woq_config_param* p, woq_runtime_ctx* ctx) {
   WType packedw(0);
   static Launcher launcher;
   if constexpr (std::is_same_v<WType, jblas::storage::gemm::StorageWeightKBlockNInteger>) {
+    TORCH_CHECK(p->scale_type == "fp32" || p->scale_type == "bf16",
+                "Qbits: scale_type must be fp32/bf16 in NInteger Weight.");
     packedw = launcher.mProB.createStorage(ctx->n, ctx->k, ctx->blocksize, wei2jblasdt_map[p->weight_type],
-                                           jblas::utils::jblas_dtype<float>, jblas::utils::jblas_dtype<float>, false);
+                                           scale2jblasdt_map[p->scale_type], jblas::utils::jblas_dtype<float>, false);
   } else if constexpr (std::is_same_v<WType, jblas::storage::gemm::StorageWeightKBlockNFloat>) {
+    if (p->weight_type == "nf4" || p->weight_type == "fp4_e2m1" || p->weight_type == "fp4_e2m1_bnb") {
+      TORCH_CHECK(p->scale_type == "fp32" || p->scale_type == "bf16",
+                  "Qbits: scale_type must be fp32/bf16 in 4Bit NFloat Weight.");
+    } else {
+      TORCH_CHECK(p->scale_type == "fp32" || p->scale_type == "fp8_e8m0",
+                  "Qbits: scale_type must be fp32/fp8_e8m0 in 8Bit NFloat Weight.");
+    }
     packedw = launcher.mProB.createStorage(ctx->n, ctx->k, ctx->blocksize, wei2jblasdt_map[p->weight_type],
                                            scale2jblasdt_map[p->scale_type]);
   } else {
