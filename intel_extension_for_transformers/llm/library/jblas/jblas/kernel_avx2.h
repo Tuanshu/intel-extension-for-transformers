@@ -640,7 +640,8 @@ static inline JBLAS_CODE decompress_kblock_bit4_packrow1(
         vzps[iv] = _mm256_cvtepi8_epi32(tmp);
       }
     }
-    int rowpad4 = utils::padto_le(row, UnrollRow);
+    auto rowre = row - irow;
+    int rowpad4 = utils::padto_le(rowre, UnrollRow) + irow;
     for (; irow < rowpad4; irow += UnrollRow) {
       for (int iter16 = 0; iter16 < Loop16; iter16++)
         pad_bit4_16(tmpbuf + iter16 * 16, reinterpret_cast<int8_t*>(srcptr + irow * ld_src / 2 + 8 * iter16));

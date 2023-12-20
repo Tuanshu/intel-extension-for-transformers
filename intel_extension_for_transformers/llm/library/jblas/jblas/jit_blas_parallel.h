@@ -204,7 +204,7 @@ class SchedulerBase : public Scheduler2D {
     mL2Use += static_cast<size_t>(mBlock[1]) * mBlock[2] * mEleSize[1];
     mL2Use += static_cast<size_t>(mStep[0]) * mBlock[2] * mEleSize[0];
   }
-  const float DensityThres = 32;
+  const float DensityThres = 16;
   static size_t constexpr ReservedSize = 32ULL * 1024ULL;
 
   virtual float calculate_score() {
@@ -364,7 +364,7 @@ class SchedulerKBlock : public Scheduler2D {
     mL2Use += static_cast<size_t>(mBlock[1]) * mBlock[2] * mEleSize[1];
     mL2Use += static_cast<size_t>(mStep[0]) * mBlock[2] * mEleSize[0];
   }
-  const float DensityThres = 32;
+  const float DensityThres = 16;
 
   float calculate_score() {
     int tmpnstep = mThdSize[1] < _GemmCore_T::PREFERRED_N ? mThdSize[1] : _GemmCore_T::PREFERRED_N;
@@ -495,7 +495,7 @@ class SchedulerKBlockS : public SchedulerBase<_GemmCore_T> {
   }
 
  protected:
-  const float DensityThres = 32;
+  const float DensityThres = 16;
   static size_t constexpr ReservedSize = 32ULL * 1024ULL;
 
   void cache_blocking_compute() override {
