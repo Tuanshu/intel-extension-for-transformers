@@ -1,13 +1,13 @@
-#include "jblas/jit_blas_prologue_b.h"
+#include "bestla/bestla_prologue_b.h"
 #include "../include/jblas_weightonly_dispatcher.hpp"
 
 namespace woq {
-template <class GemmCore, JBLAS_ISA ISA>
+template <class GemmCore, BTLA_ISA ISA>
 void execute_qpack(woq_packq_param* p, woq_packq_ctx* ctx) {
-  using proB = jblas::prologue_b::gemm::WeightKBlockNInteger<GemmCore, ISA>;
+  using proB = bestla::prologue_b::gemm::WeightKBlockNInteger<GemmCore, ISA>;
   static proB ker;
-  auto qpackw = ker.createStorage(ctx->n, ctx->k, p->blocksize, wei2jblasdt_map[p->weight_type],
-                                  scale2jblasdt_map[p->scale_type], JBLAS_DTYPE::BF16, p->asym);
+  auto qpackw = ker.createStorage(ctx->n, ctx->k, p->blocksize, wei2bestladt_map[p->weight_type],
+                                  scale2bestladt_map[p->scale_type], BTLA_DTYPE::BF16, p->asym);
   if (p->enable_act_shuffle) ker.enableShuffle(&qpackw);
   *(ctx->output) = torch::empty(qpackw.mSize, torch::kInt8);
   qpackw.assign(ctx->output->data_ptr<int8_t>());
@@ -17,40 +17,40 @@ void execute_qpack(woq_packq_param* p, woq_packq_ctx* ctx) {
                   p->asym ? ctx->zp->data_ptr<int8_t>() : nullptr, &qpackw, &dispatcher_utils::DefaultThreading);
 }
 
-void jblas_packq(woq_packq_param* p, woq_packq_ctx* ctx) {
+void bestla_packq(woq_packq_param* p, woq_packq_ctx* ctx) {
   TORCH_CHECK(p->weight_type == "int8" || p->weight_type == "int4_clip" || p->weight_type == "int4_fullrange",
               "Qbits: only support Integer WOQ in PACKQ");
 
   if (p->compute_type == "int8") {
-    if (dispatcher_utils::check_amx() && p->blocksize % jblas::gemm::ICoreRowNAmxint8KBlock<48, 16>::KTILE == 0) {
-      return execute_qpack<jblas::gemm::ICoreRowNAmxint8KBlock<48, 16>, JblasAMX_INT8>(p, ctx);
+    if (dispatcher_utils::check_amx() && p->blocksize % bestla::gemm::ICoreRowNAmxint8KBlock<48, 16>::KTILE == 0) {
+      return execute_qpack<bestla::gemm::ICoreRowNAmxint8KBlock<48, 16>, BTLA_ISA::AMX_INT8>(p, ctx);
     }
     if (dispatcher_utils::check_avx512_vnni() &&
-        p->blocksize % jblas::gemm::ICoreRowNAvx512vnniKBlock<48, 4>::KTILE == 0) {
-      return execute_qpack<jblas::gemm::ICoreRowNAvx512vnniKBlock<48, 4>, JblasAVX512_VNNI>(p, ctx);
+        p->blocksize % bestla::gemm::ICoreRowNAvx512vnniKBlock<48, 4>::KTILE == 0) {
+      return execute_qpack<bestla::gemm::ICoreRowNAvx512vnniKBlock<48, 4>, BTLA_ISA::AVX512_VNNI>(p, ctx);
     }
-    if (dispatcher_utils::check_avx_vnni() && p->blocksize % jblas::gemm::ICoreRowNAvxvnniKBlock<48, 2>::KTILE == 0) {
-      return execute_qpack<jblas::gemm::ICoreRowNAvxvnniKBlock<48, 2>, JblasAVX_VNNI>(p, ctx);
+    if (dispatcher_utils::check_avx_vnni() && p->blocksize % bestla::gemm::ICoreRowNAvxvnniKBlock<48, 2>::KTILE == 0) {
+      return execute_qpack<bestla::gemm::ICoreRowNAvxvnniKBlock<48, 2>, BTLA_ISA::AVX_VNNI>(p, ctx);
     }
     TORCH_CHECK(false, "Qbits: Illegal config in int8 compute_type, blocksize:", p->blocksize,
                 ", ISA support vnni:", dispatcher_utils::check_avx_vnni());
   }
   if (p->compute_type == "fp32") {
     if (dispatcher_utils::check_avx512f()) {
-      return execute_qpack<jblas::gemm::SCoreRowNAvx512f<48, 8>, JblasAVX512F>(p, ctx);
+      return execute_qpack<bestla::gemm::SCoreRowNAvx512f<48, 8>, BTLA_ISA::AVX512F>(p, ctx);
     }
     if (dispatcher_utils::check_avx2()) {
-      return execute_qpack<jblas::gemm::SCoreRowNAvx2<48, 2>, JblasAVX2>(p, ctx);
+      return execute_qpack<bestla::gemm::SCoreRowNAvx2<48, 2>, BTLA_ISA::AVX2>(p, ctx);
     }
-    TORCH_CHECK(false, "Qbits: device ISA must support AVX2 when compute_type==fp32");
+    TORCH_CHECK(false, "Qbits: device ISA must support BTLA_ISA::AVX2 when compute_type==fp32");
   }
   if (p->compute_type == "bf16") {
     if (dispatcher_utils::check_amx()) {
-      return execute_qpack<jblas::gemm::HCoreRowNAmxbf16<64, 16>, JblasAMX_BF16>(p, ctx);
+      return execute_qpack<bestla::gemm::HCoreRowNAmxbf16<64, 16>, BTLA_ISA::AMX_BF16>(p, ctx);
     }
     TORCH_CHECK(false, "Qbits: device ISA must support AMX-BF16 when compute_type==bf16");
   }
-  TORCH_CHECK(false, "Qbits: unsupported jblas_config, compute_type:", p->compute_type,
+  TORCH_CHECK(false, "Qbits: unsupported bestla_config, compute_type:", p->compute_type,
               ", weight_type:", p->weight_type + ", blocksize:", p->blocksize);
 }
 }  // namespace woq
