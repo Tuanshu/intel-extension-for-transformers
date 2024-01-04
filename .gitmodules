@@ -1,0 +1,3 @@
+[submodule "intel_extension_for_transformers/llm/operator/bestla"]
+	path = intel_extension_for_transformers/llm/operator/bestla
+	url = https://github.com/intel/neural-speed.git
