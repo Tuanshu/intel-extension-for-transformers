@@ -19,9 +19,6 @@ def check_env_flag(name: str, default: bool = False) -> bool:
 SKIP_RUNTIME = check_env_flag("SKIP_RUNTIME", False)
 """ Whether to only packaging optimization """
 
-RUNTIME_ONLY = check_env_flag("RUNTIME_ONLY", False)
-""" Whether to only packaging backends """
-
 if not SKIP_RUNTIME:
     from cmake import CMAKE_BIN_DIR
     from cpuinfo import get_cpu_info
@@ -39,9 +36,6 @@ if not SKIP_RUNTIME:
 
     CMAKE_BUILD_PARALLEL_LEVEL = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL", "")
     """ Set CMAKE_BUILD_PARALLEL_LEVEL to control the parallel build level across all generators """
-
-    NE_WITH_AVX2 = check_env_flag("NE_WITH_AVX2", 'avx512f' not in cpu_flags)
-    """ Whether to limit the max ISA used to AVX2; otherwise AVX512 will be used; set to ON/OFF """
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 
@@ -112,15 +106,9 @@ class CMakeBuild(build_ext):
 
         output_dir = f"{extdir}{os.sep}"
         cmake_args = [
-            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={output_dir}",
-            f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={output_dir}",
-            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{CMAKE_BUILD_TYPE.upper()}={output_dir}",
-            f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{CMAKE_BUILD_TYPE.upper()}={output_dir}",
             f"-DPYTHON_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={CMAKE_BUILD_TYPE}",
             f"-DNE_VERSION_STRING={self.distribution.get_version()}",
-            f"-DDNNL_CPU_RUNTIME=OMP",
-            f"-DNE_WITH_AVX2={'ON' if NE_WITH_AVX2 else 'OFF'}",
             f"-DNE_WITH_TESTS=OFF",
             f"-DNE_PYTHON_API=ON",
         ]
@@ -244,10 +232,6 @@ if __name__ == '__main__':
         "intel_extension_for_transformers.qbits", 'intel_extension_for_transformers/llm/operator/csrc', lib_only=True)]
     if not SKIP_RUNTIME:
         check_submodules()
-        ext_modules.extend([
-            CMakeExtension("intel_extension_for_transformers.neural_engine_py", "intel_extension_for_transformers/llm/runtime/deprecated/"),
-            CMakeExtension("intel_extension_for_transformers.llm.runtime.graph.mpt_cpp", "intel_extension_for_transformers/llm/runtime/graph/"),
-            ])
     cmdclass={'build_ext': CMakeBuild}
 
     setup(
