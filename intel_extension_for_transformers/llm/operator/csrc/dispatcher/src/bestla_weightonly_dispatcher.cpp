@@ -75,7 +75,7 @@ void woq_quantize(woq_config_param* p, woq_runtime_ctx* ctx) {
                                            scale2bestladt_map[p->scale_type], BTLA_DTYPE::BF16, p->asym);
   } else if constexpr (std::is_same_v<WType, bestla::storage::gemm::StorageWeightKBlockNFloat>) {
     packedw = launcher.mProB.createStorage(ctx->n, ctx->k, p->blocksize, wei2bestladt_map[p->weight_type],
-                                           bestla::utils::bestla_dtype<float>);
+                                           scale2bestladt_map[p->scale_type]);
   } else {
     assert(0);
   }
@@ -159,25 +159,20 @@ void do_compute(woq_config_param* p, woq_runtime_ctx* ctx, ParamA param_a) {
     }
 
     bestla::utils::GemmProblem gp(1, ctx->m, ctx->n, ctx->k, p->blocksize);
-    if constexpr (std::is_same_v<StorageWeight, bestla::storage::gemm::StorageWeightKBlockNInteger>) {
-      typename Launcher::Param args{
-          gp,
-          param_a,
-          dynamic_cast<bestla::storage::gemm::StorageWeightKBlockNInteger*>(ctx->deseries_wei),
-          {packedw->template SPtr<int8_t>(), packedw->SDtype(), packedw->CStep(),
-           p->asym ? packedw->template ZPtr<int8_t>() : nullptr,
-           p->asym ? param_a.reduce->template RPtr<float>() : nullptr, p->asym ? param_a.reduce->lda : -1},
-          param_epi};
+    
+    typename Launcher::Param args{
+        gp,
+        param_a,
+        dynamic_cast<bestla::storage::gemm::StorageWeightKBlockNInteger*>(ctx->deseries_wei),
+        {packedw->template SPtr<int8_t>(), packedw->SDtype(), packedw->CStep(),
+         p->asym ? packedw->template ZPtr<int8_t>() : nullptr,
+         p->asym ? param_a.reduce->template RPtr<float>() : nullptr, p->asym ? param_a.reduce->lda : -1},
+        param_epi};
 
-      if (p->asym || packedw->ShfIndice()) {
-        bestla::parallel::GemmRunWithA<Parallel>(launcher, args, &dispatcher_utils::DefaultThreading);
-      } else {
-        bestla::parallel::GemmRun<Parallel>(launcher, args, &dispatcher_utils::DefaultThreading);
-      }
+    if (p->asym || packedw->ShfIndice()) {
+      bestla::parallel::GemmRunWithA<Parallel>(launcher, args, &dispatcher_utils::DefaultThreading);
     } else {
-      // TODO(zhe): remove this branch after using NFloat ProB in nerual-speed, only need to reset paramC in differenct
-      // ProB.
-      assert(0);
+      bestla::parallel::GemmRun<Parallel>(launcher, args, &dispatcher_utils::DefaultThreading);
     }
   }
   if (tmpbuf != woq_workspace && tmpbuf != nullptr) bestla::utils::afree(tmpbuf);
