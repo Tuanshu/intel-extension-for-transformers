@@ -11,7 +11,7 @@
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
-#include "../include/jblas_gemm_dispatcher.hpp"
+#include "../include/bestla_gemm_dispatcher.hpp"
 #include "../include/dispatcher_utils.hpp"
 #include "bestla/bestla.h"
 #include "bestla/bestla_epilogue.h"

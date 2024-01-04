@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 #include "dispatcher/include/dispatcher_utils.hpp"
-#include "dispatcher/include/jblas_gemm_dispatcher.hpp"
-#include "dispatcher/include/jblas_weightonly_dispatcher.hpp"
+#include "dispatcher/include/bestla_gemm_dispatcher.hpp"
+#include "dispatcher/include/bestla_weightonly_dispatcher.hpp"
 #include "include/dropout.hpp"
 #include <ATen/core/TensorBody.h>
 #include <c10/core/ScalarType.h>

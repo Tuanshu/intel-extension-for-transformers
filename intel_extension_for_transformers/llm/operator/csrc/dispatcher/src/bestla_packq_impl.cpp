@@ -1,5 +1,5 @@
 #include "bestla/bestla_prologue_b.h"
-#include "../include/jblas_weightonly_dispatcher.hpp"
+#include "../include/bestla_weightonly_dispatcher.hpp"
 
 namespace woq {
 template <class GemmCore, BTLA_ISA ISA>

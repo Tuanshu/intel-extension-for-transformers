@@ -11,8 +11,8 @@
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
-#include "../include/jblas_weightonly_dispatcher.hpp"
-#include "../include/jblas_customop.hpp"
+#include "../include/bestla_weightonly_dispatcher.hpp"
+#include "../include/bestla_customop.hpp"
 #include <omp.h>
 #include "bestla/bestla.h"
 #include "bestla/bestla_epilogue.h"
