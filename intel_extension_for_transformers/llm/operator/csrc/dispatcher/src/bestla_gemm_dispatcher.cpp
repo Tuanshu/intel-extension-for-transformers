@@ -32,7 +32,7 @@ template <class GemmCore, template <class _T, BTLA_ISA> class PrologueA, templat
           typename DT>
 void do_gemm(bestla_gemm_runtime_ctx* ctx) {
   using Launcher = bestla::wrapper::gemm::LauncherBase<GemmCore::ISA, GemmCore, PrologueA,
-                                                      bestla::prologue_b::gemm::WeightPack, Epilogue>;
+                                                       bestla::prologue_b::gemm::WeightPack, Epilogue>;
   Launcher launcher;
   using Parallel = bestla::parallel::gemm::SchedulerBase<GemmCore>;
   auto packw = launcher.mProB.createStorage(ctx->n, ctx->k);
@@ -75,7 +75,7 @@ void dispatch_bestla_gemm(bestla_gemm_runtime_ctx* ctx) {
     }
   }
   TORCH_CHECK(false, "QBits: unsupported config in gemm op, data_type:", dispatcher_utils::get_torch_dt_name(ctx->matA),
-              ", BTLA_ISA::AVX2:", dispatcher_utils::check_avx2(), ", BTLA_ISA::AVX512F:", dispatcher_utils::check_avx512f(),
-              ", BTLA_ISA::AMX_BF16:", dispatcher_utils::check_amx());
+              ", AVX2:", dispatcher_utils::check_avx2(), ", AVX512F:", dispatcher_utils::check_avx512f(),
+              ", AMX_BF16:", dispatcher_utils::check_amx());
 }
 }  // namespace bestla_gemm

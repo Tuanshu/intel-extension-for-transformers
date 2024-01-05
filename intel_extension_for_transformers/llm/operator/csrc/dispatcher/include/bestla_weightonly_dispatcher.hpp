@@ -65,8 +65,8 @@ static std::map<std::string, BTLA_DTYPE> wei2bestladt_map{{"int8", BTLA_DTYPE::S
                                                           {"fp4_e2m1", BTLA_DTYPE::F4_E2M1},
                                                           {"fp8_e4m3", BTLA_DTYPE::F8_E4M3},
                                                           {"fp8_e5m2", BTLA_DTYPE::F8_E5M2}};
-static std::map<std::string, BTLA_DTYPE> scale2bestladt_map{{"fp32", BTLA_DTYPE::F32},
-                                                            {"fp8_e8m0", BTLA_DTYPE::F8_E8M0}};
+static std::map<std::string, BTLA_DTYPE> scale2bestladt_map{
+    {"fp32", BTLA_DTYPE::F32}, {"bf16", BTLA_DTYPE::BF16}, {"fp8_e8m0", BTLA_DTYPE::F8_E8M0}};
 
 void dispatch_woq_task(woq_config_param* p, woq_runtime_ctx* ctx, WOQ_TASK task);
 void bestla_packq(woq_packq_param* p, woq_packq_ctx* ctx);

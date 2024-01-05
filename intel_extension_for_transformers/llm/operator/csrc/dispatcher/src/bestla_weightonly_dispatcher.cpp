@@ -71,9 +71,19 @@ void woq_quantize(woq_config_param* p, woq_runtime_ctx* ctx) {
   WType packedw(0);
   static Launcher launcher;
   if constexpr (std::is_same_v<WType, bestla::storage::gemm::StorageWeightKBlockNInteger>) {
+    TORCH_CHECK(p->scale_type == "fp32" || p->scale_type == "bf16",
+                "Qbits: scale_type must be fp32/bf16 in NInteger Weight.");
+    if (p->scale_type == "bf16") TORCH_CHECK(!p->asym, "Qbits: asym is not supported when scale_type==bf16 currently.");
     packedw = launcher.mProB.createStorage(ctx->n, ctx->k, p->blocksize, wei2bestladt_map[p->weight_type],
                                            scale2bestladt_map[p->scale_type], BTLA_DTYPE::BF16, p->asym);
   } else if constexpr (std::is_same_v<WType, bestla::storage::gemm::StorageWeightKBlockNFloat>) {
+    if (p->weight_type == "nf4" || p->weight_type == "fp4_e2m1" || p->weight_type == "fp4_e2m1_bnb") {
+      TORCH_CHECK(p->scale_type == "fp32" || p->scale_type == "bf16",
+                  "Qbits: scale_type must be fp32/bf16 in 4Bit NFloat Weight.");
+    } else {
+      TORCH_CHECK(p->scale_type == "fp32" || p->scale_type == "fp8_e8m0",
+                  "Qbits: scale_type must be fp32/fp8_e8m0 in 8Bit NFloat Weight.");
+    }
     packedw = launcher.mProB.createStorage(ctx->n, ctx->k, p->blocksize, wei2bestladt_map[p->weight_type],
                                            scale2bestladt_map[p->scale_type]);
   } else {
@@ -159,7 +169,7 @@ void do_compute(woq_config_param* p, woq_runtime_ctx* ctx, ParamA param_a) {
     }
 
     bestla::utils::GemmProblem gp(1, ctx->m, ctx->n, ctx->k, p->blocksize);
-    
+
     typename Launcher::Param args{
         gp,
         param_a,
@@ -285,6 +295,7 @@ void parse_weight(woq_config_param* p, woq_runtime_ctx* ctx) {
   }
   if (p->weight_type == "nf4" || p->weight_type == "fp4_e2m1_bnb" || p->weight_type == "fp4_e2m1" ||
       p->weight_type == "fp8_e4m3" || p->weight_type == "fp8_e5m2") {
+    TORCH_CHECK(!p->asym, "Qbits: float-weight unsupports asym quantization.");
     if constexpr (GemmCore::ISA != BTLA_ISA::AMX_INT8 && GemmCore::ISA != BTLA_ISA::AVX512_VNNI &&
                   GemmCore::ISA != BTLA_ISA::AVX_VNNI)
       return parse_activation<TASK, GemmCore, WeightKBlockNFloat>(p, ctx);
@@ -367,11 +378,10 @@ void parse_gemm_core_offline(woq_config_param* p, woq_runtime_ctx* ctx) {
       return parse_weight<TASK, bestla::gemm::HCoreRowNAmxbf16<64, 16>>(p, ctx);
     }
   }
-  TORCH_CHECK(
-      false, "Qbits: parse packweight fail, NTile:", NTile, ", CType:", CType, ", AMX:", dispatcher_utils::check_amx(),
-      ", BTLA_ISA::AVX512_VNNI:", dispatcher_utils::check_avx512_vnni(),
-      ", BTLA_ISA::AVX_VNNI:", dispatcher_utils::check_avx_vnni(),
-      ", BTLA_ISA::AVX512F:", dispatcher_utils::check_avx512f(), ", BTLA_ISA::AVX2:", dispatcher_utils::check_avx2());
+  TORCH_CHECK(false, "Qbits: parse packweight fail, NTile:", NTile, ", CType:", CType,
+              ", AMX:", dispatcher_utils::check_amx(), ", AVX512_VNNI:", dispatcher_utils::check_avx512_vnni(),
+              ", AVX_VNNI:", dispatcher_utils::check_avx_vnni(), ", AVX512F:", dispatcher_utils::check_avx512f(),
+              ", AVX2:", dispatcher_utils::check_avx2());
 }
 
 template <WOQ_TASK TASK>
