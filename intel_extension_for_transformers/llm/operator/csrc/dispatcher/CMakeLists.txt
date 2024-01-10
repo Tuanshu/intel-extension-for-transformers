@@ -23,9 +23,8 @@ file(GLOB HEADERS
     ${PROJECT_SOURCE_DIR}/include/*.hpp
 )
 
-option(NE_BTLA_UT                "enable BesTLA's unit tests"    OFF)
-
-add_subdirectory(../../bestla bestla_out)
+include(FetchContent)
+include(neural_speed.cmake)
 
 add_library(bestla_dispatcher STATIC ${HEADERS} ${SOURCES})
 if(WIN32)
