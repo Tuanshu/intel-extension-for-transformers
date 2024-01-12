@@ -1,0 +1,4 @@
+**__pycache__**
+docker
+!/docker/*third-party-programs.txt
+runtime_outs
