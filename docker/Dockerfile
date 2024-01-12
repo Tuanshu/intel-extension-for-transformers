@@ -46,10 +46,15 @@ RUN mkdir -p /app/intel-extension-for-transformers
 WORKDIR /app/intel-extension-for-transformers
 COPY . /app/intel-extension-for-transformers
 
-RUN ${PYTHON} -m pip install -r requirements.txt --no-cache-dir -f https://download.pytorch.org/whl/cpu/torch_stable.html && \
-    ${PYTHON} -m pip install -r tests/requirements.txt --no-cache-dir -f https://developer.intel.com/ipex-whl-stable-cpu && \
+RUN ${PYTHON} -m pip install -r requirements.txt --no-cache-dir  && \
+    ${PYTHON} -m pip install -r tests/requirements.txt --no-cache-dir && \
     ${PYTHON} -m pip install . --no-cache-dir && \
     rm -rf .git*
+
+# RUN ${PYTHON} -m pip install -r requirements.txt --no-cache-dir -f https://download.pytorch.org/whl/cpu/torch_stable.html && \
+#     ${PYTHON} -m pip install -r tests/requirements.txt --no-cache-dir -f https://developer.intel.com/ipex-whl-stable-cpu && \
+#     ${PYTHON} -m pip install . --no-cache-dir && \
+#     rm -rf .git*
 
 FROM itrex-base as prod
 
