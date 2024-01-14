@@ -5,3 +5,10 @@
 pip install時有build
 
 這沒有 模型的graph需要build
+
+
+python  examples/huggingface/pytorch/text-generation/inference/run_generation.py -m Qwen/Qwen-14B-Chat
+
+
+python  examples/huggingface/pytorch/text-generation/inference/run_generation.py -m THUDM/chatglm3-6b
+
